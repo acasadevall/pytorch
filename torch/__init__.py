@@ -400,6 +400,10 @@ def _load_global_deps() -> None:
     here = os.path.abspath(__file__)
     global_deps_lib_path = os.path.join(os.path.dirname(here), "lib", lib_name)
 
+    if not os.path.exists(global_deps_lib_path):
+        global_deps_lib_path = lib_name
+        print(f"[RUNTIME] Ensure LD_LIBRARY_PATH for '{global_deps_lib_path}'. Current: {os.environ.get('LD_LIBRARY_PATH', None)}")
+
     # In scikit-build-core editable installs with redirect mode, native libs are
     # installed to the dist package location rather than relative to __file__.
     if not os.path.exists(global_deps_lib_path):
