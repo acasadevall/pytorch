@@ -2576,10 +2576,25 @@ from torch.serialization import load, save
 
 
 # Shared memory manager needs to know the exact location of manager executable
-def _manager_path() -> bytes:
+def _manager_path():
+    def get_env_paths(*var_name: str) -> list[str]:
+        paths = []
+        for name in var_name:
+            raw_value = os.environ.get(name, "")
+            paths += (raw_value.split(os.pathsep) if raw_value else [])
+        return paths
+
     if platform.system() == "Windows":
         return b""
     path = get_file_path("torch", "bin", "torch_shm_manager")
+
+    if not os.path.exists(path):
+        # try with LIBTORCH_LIB_PATH or LD_LIBRARY_PATH
+        for p in get_env_paths("LIBTORCH_LIB_PATH","LD_LIBRARY_PATH"):
+            if os.path.exists(libtorch_candidate_path := os.path.join(p, "..", "bin", "torch_shm_manager")):
+                path = libtorch_candidate_path
+                break
+    
     prepare_multiprocessing_environment(get_file_path("torch"))
     if not os.path.exists(path):
         raise RuntimeError("Unable to find torch_shm_manager at " + path)

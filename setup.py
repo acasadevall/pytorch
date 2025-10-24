@@ -764,16 +764,22 @@ def build_deps() -> None:
             download_and_extract_nightly_wheel(nightly_version)
             return
 
-    check_submodules()
-    check_pydep("yaml", "pyyaml")
-    build_pytorch(
-        version=TORCH_VERSION,
-        cmake_python_library=CMAKE_PYTHON_LIBRARY.as_posix(),
-        build_python=not BUILD_LIBTORCH_WHL,
-        rerun_cmake=RERUN_CMAKE,
-        cmake_only=CMAKE_ONLY,
-        cmake=cmake,
-    )
+    # Skip check_submodules when using BUILD_PYTHON_ONLY with custom LIBTORCH_LIB_PATH
+    if BUILD_PYTHON_ONLY and os.getenv("LIBTORCH_LIB_PATH"):
+        report("-- Skipping full build since BUILD_PYTHON_ONLY=ON and LIBTORCH_LIB_PATH is set")
+        report(f"-- Using custom libtorch libraries from: {os.getenv('LIBTORCH_LIB_PATH')}")
+        check_pydep("yaml", "pyyaml")
+    else:
+        check_submodules()
+        check_pydep("yaml", "pyyaml")
+        build_pytorch(
+            version=TORCH_VERSION,
+            cmake_python_library=CMAKE_PYTHON_LIBRARY.as_posix(),
+            build_python=not BUILD_LIBTORCH_WHL,
+            rerun_cmake=RERUN_CMAKE,
+            cmake_only=CMAKE_ONLY,
+            cmake=cmake,
+        )
 
     if CMAKE_ONLY:
         report(
@@ -1181,6 +1187,8 @@ def configure_extension_build() -> tuple[
     ################################################################################
 
     library_dirs: list[str] = [str(TORCH_LIB_DIR)]
+    if (ge := (os.getenv("LIBTORCH_LIB_PATH"))) is not None:
+        library_dirs += [ge]
     extra_install_requires: list[str] = []
 
     if IS_WINDOWS:
@@ -1215,6 +1223,10 @@ def configure_extension_build() -> tuple[
     if BUILD_LIBTORCH_WHL:
         main_libraries = ["torch"]
         main_sources = []
+    elif BUILD_PYTHON_ONLY and os.getenv("LIBTORCH_LIB_PATH"):
+        # in that case our LIBTORCH_PATH can be elsewhere, but we dont have torch_no_python
+        # link against core torch libraries (incl. torch_python)
+        main_libraries = ["torch_python", "torch", "torch_cpu", "c10", "torch_global_deps"]
 
     if build_type.is_debug():
         if IS_WINDOWS:
@@ -1366,7 +1378,7 @@ def main() -> None:
         "jinja2",
         "fsspec>=0.8.5",
     ]
-    if BUILD_PYTHON_ONLY:
+    if BUILD_PYTHON_ONLY and not os.getenv("LIBTORCH_LIB_PATH"):
         install_requires += [f"{LIBTORCH_PKG_NAME}=={TORCH_VERSION}"]
 
     # Parse the command line and check the arguments before we proceed with
