@@ -61,7 +61,7 @@ else:
 # Windows need setup a temp dir to store .obj files.
 _BUILD_TEMP_DIR = "CxxBuild"
 _HERE = os.path.abspath(__file__)
-_TORCH_PATH = os.path.dirname(os.path.dirname(_HERE))
+_TORCH_PATH = os.getenv("TORCH_INSTALL_PATH", os.path.dirname(os.path.dirname(_HERE)))
 _LINKER_SCRIPT = os.path.join(_TORCH_PATH, "_inductor/script.ld")
 
 # initialize variables for compilation

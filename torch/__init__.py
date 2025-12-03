@@ -391,6 +391,16 @@ def _preload_cuda_deps(err: OSError | None = None, required: bool = True) -> Non
 
 # See Note [Global dependencies]
 def _load_global_deps() -> None:
+    def _load_manual_libs(lib_name: str) -> None:
+        torch_path = os.environ.get('TORCH_INSTALL_PATH', os.path.abspath(__file__))
+        print(f"[RUNTIME] Loading '{lib_name}' ... ", end='')
+        if os.path.exists(gl_lp := os.path.join(torch_path, 'lib', lib_name)):
+            ctypes.CDLL(gl_lp, mode=ctypes.RTLD_GLOBAL)
+            print("Found!")
+        else:
+            print("Not found!")
+        return gl_lp
+
     if platform.system() == "Windows":
         return
 
@@ -401,8 +411,13 @@ def _load_global_deps() -> None:
     global_deps_lib_path = os.path.join(os.path.dirname(here), "lib", lib_name)
 
     if not os.path.exists(global_deps_lib_path):
-        global_deps_lib_path = lib_name
-        print(f"[RUNTIME] Ensure LD_LIBRARY_PATH for '{global_deps_lib_path}'. Current: {os.environ.get('LD_LIBRARY_PATH', None)}")
+        if os.environ.get('TORCH_INSTALL_PATH') is not None:
+            os.environ['LD_LIBRARY_PATH'] = os.path.join(os.environ.get('TORCH_INSTALL_PATH'), 'lib') + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
+            global_deps_lib_path = _load_manual_libs(f"libtorch_global_deps{lib_ext}") # needed in next CDLL steps
+            _ = _load_manual_libs(f"libtorch_python{lib_ext}")
+            print(f"[RUNTIME] TORCH_INSTALL_PATH: '{os.environ['TORCH_INSTALL_PATH']}'")
+        
+        print(f"[RUNTIME] LD_LIBRARY_PATH: {os.environ.get('LD_LIBRARY_PATH', None)}")
 
     # In scikit-build-core editable installs with redirect mode, native libs are
     # installed to the dist package location rather than relative to __file__.
@@ -456,7 +471,6 @@ def _load_global_deps() -> None:
         # As PyTorch is not purelib, but nvidia-*-cu12 is
         _preload_cuda_deps(err)
         ctypes.CDLL(global_deps_lib_path, mode=ctypes.RTLD_GLOBAL)
-
 
 if (USE_RTLD_GLOBAL_WITH_LIBTORCH or os.getenv("TORCH_USE_RTLD_GLOBAL")) and (
     platform.system() != "Windows"
